@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, BackHandler, View } from 'react-native';
 import { Screen } from './src/components/ui';
+import { sampleQuizQuestions } from './src/logic/sample';
 import { buildAssessment } from './src/logic/scoring';
 import { Route } from './src/navigation';
 import HistoryScreen from './src/screens/HistoryScreen';
@@ -16,13 +17,15 @@ import {
   toggleFinishedBook,
 } from './src/storage/storage';
 import { colors } from './src/theme/theme';
-import { Assessment } from './src/types';
+import { Assessment, Question } from './src/types';
 
 export default function App() {
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [finishedBooks, setFinishedBooks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  /** 当前这一场评估抽中的题目，进入 quiz 时生成，交卷后清空 */
+  const [quizPaper, setQuizPaper] = useState<Question[] | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -36,7 +39,16 @@ export default function App() {
     })();
   }, []);
 
-  const goHome = useCallback(() => setRoute({ name: 'home' }), []);
+  const goHome = useCallback(() => {
+    setQuizPaper(null);
+    setRoute({ name: 'home' });
+  }, []);
+
+  const startQuiz = useCallback(() => {
+    const paper = sampleQuizQuestions(assessments);
+    setQuizPaper(paper);
+    setRoute({ name: 'quiz' });
+  }, [assessments]);
 
   // Android 物理返回键
   useEffect(() => {
@@ -48,12 +60,17 @@ export default function App() {
     return () => sub.remove();
   }, [route, goHome]);
 
-  const handleFinishQuiz = useCallback(async (answers: Record<string, string>) => {
-    const assessment = buildAssessment(answers);
-    const next = await saveAssessment(assessment);
-    setAssessments(next);
-    setRoute({ name: 'result', assessmentId: assessment.id });
-  }, []);
+  const handleFinishQuiz = useCallback(
+    async (answers: Record<string, string>) => {
+      const questionIds = quizPaper?.map((q) => q.id) ?? Object.keys(answers);
+      const assessment = buildAssessment(answers, questionIds);
+      const next = await saveAssessment(assessment);
+      setAssessments(next);
+      setQuizPaper(null);
+      setRoute({ name: 'result', assessmentId: assessment.id });
+    },
+    [quizPaper]
+  );
 
   const handleToggleFinished = useCallback(async (bookId: string) => {
     const next = await toggleFinishedBook(bookId);
@@ -77,7 +94,14 @@ export default function App() {
 
   switch (route.name) {
     case 'quiz':
-      content = <QuizScreen onFinish={handleFinishQuiz} onExit={goHome} />;
+      content = (
+        <QuizScreen
+          key={quizPaper?.map((q) => q.id).join(',') || 'empty'}
+          questions={quizPaper ?? []}
+          onFinish={handleFinishQuiz}
+          onExit={goHome}
+        />
+      );
       break;
 
     case 'result': {
@@ -88,7 +112,7 @@ export default function App() {
           <HomeScreen
             historyCount={0}
             finishedCount={finishedBooks.length}
-            onStart={() => setRoute({ name: 'quiz' })}
+            onStart={startQuiz}
             onOpenResult={goHome}
             onOpenLibrary={() => setRoute({ name: 'library' })}
             onOpenHistory={() => setRoute({ name: 'history' })}
@@ -103,7 +127,7 @@ export default function App() {
           finishedBooks={finishedBooks}
           onToggleFinished={handleToggleFinished}
           onBack={goHome}
-          onRetake={() => setRoute({ name: 'quiz' })}
+          onRetake={startQuiz}
         />
       );
       break;
@@ -135,7 +159,7 @@ export default function App() {
           latest={latest}
           historyCount={assessments.length}
           finishedCount={finishedBooks.length}
-          onStart={() => setRoute({ name: 'quiz' })}
+          onStart={startQuiz}
           onOpenResult={() =>
             latest && setRoute({ name: 'result', assessmentId: latest.id })
           }

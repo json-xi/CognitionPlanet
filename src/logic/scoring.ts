@@ -35,11 +35,15 @@ export function computeOverall(dimensionScores: DimensionScore[]): number {
   return round(sum / dimensionScores.length);
 }
 
-export function buildAssessment(answers: Record<string, string>): Assessment {
+export function buildAssessment(
+  answers: Record<string, string>,
+  questionIds?: string[]
+): Assessment {
   const dimensionScores = computeDimensionScores(answers);
   return {
     id: `as_${Date.now()}`,
     createdAt: Date.now(),
+    questionIds: questionIds ?? Object.keys(answers),
     answers,
     dimensionScores,
     overall: computeOverall(dimensionScores),

@@ -1,7 +1,8 @@
 import { Question } from '../types';
 
 /**
- * 每个维度 5 题，共 30 题。
+ * 每个维度 8 题，共 48 题。
+ * 每次评估按维度抽题（见 src/logic/sample.ts），避免重测记住答案。
  * 选项分值 0-100，代表该回答体现的认知水平，非对错二分。
  * 情景题(scenario)测能力，习惯题(habit)测日常行为倾向。
  */
@@ -79,6 +80,50 @@ export const QUESTIONS: Question[] = [
       },
     ],
   },
+  {
+    id: 'c6',
+    dimension: 'critical',
+    kind: 'scenario',
+    text: '一篇报道说：「调查显示，90% 的受访者支持该政策。」你最该先问什么？',
+    options: [
+      { id: 'a', text: '另外 10% 为什么反对', score: 25 },
+      { id: 'b', text: '这个政策到底好不好', score: 15 },
+      { id: 'c', text: '是不是权威媒体发的', score: 35 },
+      {
+        id: 'd',
+        text: '受访者是谁、怎么抽的、一共问了多少人',
+        score: 100,
+      },
+    ],
+  },
+  {
+    id: 'c7',
+    dimension: 'critical',
+    kind: 'scenario',
+    text: '有人说：「要么全面支持，要么就是反对进步。」这句话的问题是？',
+    options: [
+      { id: 'a', text: '语气太冲，容易伤人', score: 20 },
+      { id: 'b', text: '没给出具体例子', score: 35 },
+      { id: 'c', text: '把复杂立场压成了非此即彼的假两难', score: 100 },
+      { id: 'd', text: '偷换了「进步」这个概念', score: 55 },
+    ],
+  },
+  {
+    id: 'c8',
+    dimension: 'critical',
+    kind: 'habit',
+    text: '看到一条爆炸性新闻时，你通常会？',
+    options: [
+      { id: 'a', text: '先转发出去，重要的是快', score: 0 },
+      { id: 'b', text: '看完标题就形成判断', score: 15 },
+      { id: 'c', text: '会读完正文再决定信不信', score: 55 },
+      {
+        id: 'd',
+        text: '先找原始来源或第二家独立报道交叉核实',
+        score: 100,
+      },
+    ],
+  },
 
   // ───────────────── 概率与不确定性 ─────────────────
   {
@@ -147,6 +192,54 @@ export const QUESTIONS: Question[] = [
       { id: 'b', text: '很少，通常只说「可能」「大概」', score: 25 },
       { id: 'c', text: '偶尔会在心里估一下', score: 55 },
       { id: 'd', text: '经常会，而且事后会回头看估得准不准', score: 100 },
+    ],
+  },
+  {
+    id: 'p6',
+    dimension: 'probability',
+    kind: 'scenario',
+    text: '天气预报说「明天下雨概率 30%」。最准确的理解是？',
+    options: [
+      { id: 'a', text: '明天大概会下三分之一天的雨', score: 10 },
+      { id: 'b', text: '明天有 30% 的地区会下雨', score: 20 },
+      { id: 'c', text: '气象员自己也不太确定', score: 30 },
+      {
+        id: 'd',
+        text: '类似条件下，大约 10 次里有 3 次会下雨',
+        score: 100,
+      },
+    ],
+  },
+  {
+    id: 'p7',
+    dimension: 'probability',
+    kind: 'scenario',
+    text: '连续三次抽中大奖后，有人说「手气热，再来一次」。你怎么看？',
+    options: [
+      { id: 'a', text: '有道理，运气会延续', score: 5 },
+      { id: 'b', text: '恰恰相反，该冷却了', score: 15 },
+      { id: 'c', text: '要看奖池还剩多少', score: 35 },
+      {
+        id: 'd',
+        text: '独立事件彼此无关，过去结果不改变下一次概率',
+        score: 100,
+      },
+    ],
+  },
+  {
+    id: 'p8',
+    dimension: 'probability',
+    kind: 'habit',
+    text: '面对「几乎确定」和「有一点可能」这类说法，你会？',
+    options: [
+      { id: 'a', text: '直接按字面意思接受', score: 10 },
+      { id: 'b', text: '觉得差不多就行，不必较真', score: 25 },
+      { id: 'c', text: '会在心里换成大概的百分比', score: 65 },
+      {
+        id: 'd',
+        text: '会要求对方给出数字区间，并记下事后对照',
+        score: 100,
+      },
     ],
   },
 
@@ -223,6 +316,50 @@ export const QUESTIONS: Question[] = [
       { id: 'd', text: '我会提前把预测写下来，事后拿出来对照', score: 100 },
     ],
   },
+  {
+    id: 'b6',
+    dimension: 'bias',
+    kind: 'scenario',
+    text: '你买了一只股票后，开始只看利好新闻、跳过利空分析。这主要是？',
+    options: [
+      { id: 'a', text: '信息过载，只能挑着看', score: 20 },
+      { id: 'b', text: '正常的风险控制', score: 10 },
+      { id: 'c', text: '确认偏误：只搜集支持既有立场的信息', score: 100 },
+      { id: 'd', text: '损失厌恶在作祟', score: 45 },
+    ],
+  },
+  {
+    id: 'b7',
+    dimension: 'bias',
+    kind: 'scenario',
+    text: '团队里第一个发言的人定了调，后面的人纷纷附和。最可能发生了什么？',
+    options: [
+      { id: 'a', text: '大家本来就意见一致', score: 15 },
+      { id: 'b', text: '第一个人权威高，别人不敢反驳', score: 50 },
+      { id: 'c', text: '话题本身没什么可争的', score: 20 },
+      {
+        id: 'd',
+        text: '锚定 + 从众：早期意见压缩了后续独立判断的空间',
+        score: 100,
+      },
+    ],
+  },
+  {
+    id: 'b8',
+    dimension: 'bias',
+    kind: 'habit',
+    text: '做完一个重要决定后，你会主动寻找「反对这个决定」的理由吗？',
+    options: [
+      { id: 'a', text: '不会，决定了就往前走', score: 10 },
+      { id: 'b', text: '偶尔会，但很快就放弃', score: 35 },
+      { id: 'c', text: '重大决定会刻意找反方意见', score: 75 },
+      {
+        id: 'd',
+        text: '会，而且尽量在决定落地前就完成这一步',
+        score: 100,
+      },
+    ],
+  },
 
   // ───────────────── 系统思维 ─────────────────
   {
@@ -289,6 +426,50 @@ export const QUESTIONS: Question[] = [
       {
         id: 'd',
         text: '习惯性会，还会想「如果所有人都这么做会怎样」',
+        score: 100,
+      },
+    ],
+  },
+  {
+    id: 's6',
+    dimension: 'systems',
+    kind: 'scenario',
+    text: '公司给销售提成按「成交单数」算，结果客服投诉暴增。最可能的原因是？',
+    options: [
+      { id: 'a', text: '客服人手不够', score: 20 },
+      { id: 'b', text: '产品本身质量下降了', score: 30 },
+      { id: 'c', text: '客户最近变得更挑剔', score: 15 },
+      {
+        id: 'd',
+        text: '激励结构推动了「先成交再说」，把问题转移到下游',
+        score: 100,
+      },
+    ],
+  },
+  {
+    id: 's7',
+    dimension: 'systems',
+    kind: 'scenario',
+    text: '「延迟」在系统里通常意味着？',
+    options: [
+      { id: 'a', text: '做事的人效率低', score: 10 },
+      { id: 'b', text: '信息传得出了问题', score: 35 },
+      { id: 'c', text: '因果之间存在时间差，容易让人误判干预效果', score: 100 },
+      { id: 'd', text: '需要加更多监控节点', score: 40 },
+    ],
+  },
+  {
+    id: 's8',
+    dimension: 'systems',
+    kind: 'habit',
+    text: '遇到反复出现的问题时，你更常做的是？',
+    options: [
+      { id: 'a', text: '每次都用最快的办法先压下去', score: 15 },
+      { id: 'b', text: '换个人来负责同一件事', score: 25 },
+      { id: 'c', text: '写一份更细的操作手册', score: 50 },
+      {
+        id: 'd',
+        text: '画清相关方、激励和反馈回路，再决定改哪里',
         score: 100,
       },
     ],
@@ -371,6 +552,54 @@ export const QUESTIONS: Question[] = [
       { id: 'd', text: '会正式做一遍，并据此修改方案', score: 100 },
     ],
   },
+  {
+    id: 'd6',
+    dimension: 'decision',
+    kind: 'scenario',
+    text: '两个方案：A 稳赚小钱，B 有机会大赚也可能亏本。你怎么选？',
+    options: [
+      { id: 'a', text: '永远选稳的，不冒险', score: 25 },
+      { id: 'b', text: '选看起来更刺激的那个', score: 15 },
+      { id: 'c', text: '看身边的人怎么选', score: 20 },
+      {
+        id: 'd',
+        text: '比较期望值、下行风险和自己能否承受最坏结果',
+        score: 100,
+      },
+    ],
+  },
+  {
+    id: 'd7',
+    dimension: 'decision',
+    kind: 'scenario',
+    text: '一个决定做错了，但结果碰巧很好。你的反应更接近？',
+    options: [
+      { id: 'a', text: '结果好就说明决定是对的', score: 5 },
+      { id: 'b', text: '庆幸自己运气不错，然后翻篇', score: 35 },
+      { id: 'c', text: '有点不安，但说不清为什么', score: 50 },
+      {
+        id: 'd',
+        text: '仍然按决策当时的信息质量来复盘，不让好运掩盖坏过程',
+        score: 100,
+      },
+    ],
+  },
+  {
+    id: 'd8',
+    dimension: 'decision',
+    kind: 'habit',
+    text: '面对可逆的小决定（比如换个工具试用），你通常？',
+    options: [
+      { id: 'a', text: '还是会纠结很久', score: 15 },
+      { id: 'b', text: '拖到不得不选', score: 25 },
+      { id: 'c', text: '会尽快选定一个先试', score: 70 },
+      {
+        id: 'd',
+        text: '先判断可逆性，可逆就设短周期试点，不可逆才深入分析',
+        score: 100,
+      },
+    ],
+  },
 
   // ───────────────── 元认知与学习力 ─────────────────
   {
@@ -437,6 +666,61 @@ export const QUESTIONS: Question[] = [
       { id: 'd', text: '有决策记录，会定期拿出来对照复盘', score: 100 },
     ],
   },
+  {
+    id: 'm6',
+    dimension: 'meta',
+    kind: 'scenario',
+    text: '刚学完一个概念，感觉「懂了」。下一步最有效的是？',
+    options: [
+      { id: 'a', text: '马上学下一个，趁热打铁', score: 15 },
+      { id: 'b', text: '再把原文重读一遍加深印象', score: 25 },
+      { id: 'c', text: '把笔记整理得更漂亮', score: 35 },
+      {
+        id: 'd',
+        text: '合上材料，尝试用自己的话讲给外行听或做几道题',
+        score: 100,
+      },
+    ],
+  },
+  {
+    id: 'm7',
+    dimension: 'meta',
+    kind: 'habit',
+    text: '学习时遇到卡壳，你更常怎么做？',
+    options: [
+      { id: 'a', text: '跳过，以后再说', score: 15 },
+      { id: 'b', text: '反复盯着同一段看', score: 30 },
+      { id: 'c', text: '换个讲解或例子再试', score: 65 },
+      {
+        id: 'd',
+        text: '先定位卡在哪一步，再针对缺口补材料或练习',
+        score: 100,
+      },
+    ],
+  },
+  {
+    id: 'm8',
+    dimension: 'meta',
+    kind: 'habit',
+    text: '对于「我是不是高估了自己的理解」，你会？',
+    options: [
+      { id: 'a', text: '很少怀疑自己', score: 10 },
+      { id: 'b', text: '偶尔会担心，但没有具体动作', score: 35 },
+      { id: 'c', text: '会刻意找题或找人提问来检验', score: 80 },
+      {
+        id: 'd',
+        text: '把它当成常规习惯：预测自己的表现，再和实际结果对照',
+        score: 100,
+      },
+    ],
+  },
 ];
 
-export const QUESTION_COUNT = QUESTIONS.length;
+/** 题库总量 */
+export const QUESTION_BANK_SIZE = QUESTIONS.length;
+
+/** 每次评估抽题数 = 维度数 × 每维抽题数 */
+export const QUESTIONS_PER_DIMENSION = 3;
+
+/** @deprecated 请用 QUESTION_BANK_SIZE；保留别名以免旧引用报错 */
+export const QUESTION_COUNT = QUESTION_BANK_SIZE;
