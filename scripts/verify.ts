@@ -8,6 +8,15 @@ import {
   QUESTIONS,
   QUESTIONS_PER_DIMENSION,
 } from '../src/data/questions';
+import {
+  buildInsight,
+  createEmptyPlan,
+  createTask,
+  scoreDay,
+  scorePlanning,
+  shiftDateKey,
+  toDateKey,
+} from '../src/logic/actionScore';
 import { buildReadingPlan, flattenPlan } from '../src/logic/recommend';
 import {
   collectRecentQuestionIds,
@@ -15,7 +24,7 @@ import {
   sampleQuizQuestions,
 } from '../src/logic/sample';
 import { buildAssessment, sortByWeakest } from '../src/logic/scoring';
-import { Assessment } from '../src/types';
+import { Assessment, DailyPlan } from '../src/types';
 
 let failures = 0;
 
@@ -218,6 +227,63 @@ simulate('偏科型（批判维选高分项）', (i) => {
   // 这里无法按维度精准，改为：奇数题选最后、偶数选第一，覆盖中低分
   return i % 2 === 0 ? 99 : 0;
 }, 44);
+
+console.log('\n=== 行动力评分 ===');
+
+const planThin = createEmptyPlan('2026-01-01');
+planThin.tasks = [createTask('读一章', 'high')];
+check('单任务计划质量在合理区间', scorePlanning(planThin.tasks) >= 50 && scorePlanning(planThin.tasks) <= 85);
+
+const planGood = createEmptyPlan('2026-01-02');
+planGood.tasks = [
+  createTask('完成报告初稿', 'high'),
+  createTask('跑步 30 分钟', 'medium'),
+  createTask('整理笔记', 'low'),
+  createTask('回复两封邮件', 'medium'),
+];
+check('3–6 条任务计划质量接近满分', scorePlanning(planGood.tasks) >= 85);
+
+const reviewed: DailyPlan = {
+  ...planGood,
+  reviewedAt: Date.now(),
+  taskResults: {
+    [planGood.tasks[0].id]: 'done',
+    [planGood.tasks[1].id]: 'done',
+    [planGood.tasks[2].id]: 'partial',
+    [planGood.tasks[3].id]: 'skipped',
+  },
+};
+const dayScore = scoreDay(reviewed);
+check(
+  '复盘后行动力 = 0.7*执行 + 0.3*计划',
+  dayScore.reviewed &&
+    dayScore.overall === Math.round(dayScore.completion * 0.7 + dayScore.planning * 0.3),
+  `overall=${dayScore.overall} completion=${dayScore.completion} planning=${dayScore.planning}`
+);
+check('执行率落在 0–100', dayScore.completion >= 0 && dayScore.completion <= 100);
+
+const today = toDateKey();
+const streakPlans: DailyPlan[] = [];
+for (let i = 1; i <= 3; i += 1) {
+  const date = shiftDateKey(today, -i);
+  const p = createEmptyPlan(date);
+  p.tasks = [createTask(`任务 ${i}`, 'medium'), createTask(`另一件 ${i}`, 'high')];
+  p.reviewedAt = Date.now();
+  p.taskResults = {
+    [p.tasks[0].id]: 'done',
+    [p.tasks[1].id]: 'done',
+  };
+  streakPlans.push(p);
+}
+const insight = buildInsight(streakPlans);
+check('连续复盘 streak 为 3', insight.streak === 3, `实际 ${insight.streak}`);
+check('已复盘天数为 3', insight.reviewedCount === 3);
+check('平均分不为空', insight.average !== null && insight.average! > 0);
+
+const pendingPlan = createEmptyPlan(shiftDateKey(today, -5));
+pendingPlan.tasks = [createTask('未复盘事项', 'high')];
+const withPending = buildInsight([...streakPlans, pendingPlan]);
+check('能统计待复盘天数', withPending.pendingReviewCount === 1, `实际 ${withPending.pendingReviewCount}`);
 
 console.log('\n=== 结果 ===');
 if (failures > 0) {

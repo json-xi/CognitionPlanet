@@ -1,10 +1,14 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, BackHandler, View } from 'react-native';
 import { Screen } from './src/components/ui';
+import { buildInsight } from './src/logic/actionScore';
 import { sampleQuizQuestions } from './src/logic/sample';
 import { buildAssessment } from './src/logic/scoring';
 import { Route } from './src/navigation';
+import ActionPlanScreen from './src/screens/ActionPlanScreen';
+import ActionReviewScreen from './src/screens/ActionReviewScreen';
+import ActionScreen from './src/screens/ActionScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import LibraryScreen from './src/screens/LibraryScreen';
@@ -12,29 +16,34 @@ import QuizScreen from './src/screens/QuizScreen';
 import ResultScreen from './src/screens/ResultScreen';
 import {
   loadAssessments,
+  loadDailyPlans,
   loadFinishedBooks,
   saveAssessment,
   toggleFinishedBook,
+  upsertDailyPlan,
 } from './src/storage/storage';
 import { colors } from './src/theme/theme';
-import { Assessment, Question } from './src/types';
+import { Assessment, DailyPlan, Question } from './src/types';
 
 export default function App() {
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [finishedBooks, setFinishedBooks] = useState<string[]>([]);
+  const [dailyPlans, setDailyPlans] = useState<DailyPlan[]>([]);
   const [loading, setLoading] = useState(true);
   /** 当前这一场评估抽中的题目，进入 quiz 时生成，交卷后清空 */
   const [quizPaper, setQuizPaper] = useState<Question[] | null>(null);
 
   useEffect(() => {
     (async () => {
-      const [list, finished] = await Promise.all([
+      const [list, finished, plans] = await Promise.all([
         loadAssessments(),
         loadFinishedBooks(),
+        loadDailyPlans(),
       ]);
       setAssessments(list);
       setFinishedBooks(finished);
+      setDailyPlans(plans);
       setLoading(false);
     })();
   }, []);
@@ -43,6 +52,8 @@ export default function App() {
     setQuizPaper(null);
     setRoute({ name: 'home' });
   }, []);
+
+  const goAction = useCallback(() => setRoute({ name: 'action' }), []);
 
   const startQuiz = useCallback(() => {
     const paper = sampleQuizQuestions(assessments);
@@ -54,6 +65,10 @@ export default function App() {
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (route.name === 'home') return false;
+      if (route.name === 'action-plan' || route.name === 'action-review') {
+        setRoute({ name: 'action' });
+        return true;
+      }
       goHome();
       return true;
     });
@@ -77,6 +92,14 @@ export default function App() {
     setFinishedBooks(next);
   }, []);
 
+  const handleSavePlan = useCallback(async (plan: DailyPlan) => {
+    const next = await upsertDailyPlan(plan);
+    setDailyPlans(next);
+    setRoute({ name: 'action' });
+  }, []);
+
+  const actionInsight = useMemo(() => buildInsight(dailyPlans), [dailyPlans]);
+
   if (loading) {
     return (
       <Screen>
@@ -89,6 +112,7 @@ export default function App() {
   }
 
   const latest = assessments[0];
+  const planByDate = (date: string) => dailyPlans.find((p) => p.date === date);
 
   let content: React.ReactNode;
 
@@ -112,10 +136,13 @@ export default function App() {
           <HomeScreen
             historyCount={0}
             finishedCount={finishedBooks.length}
+            actionScore={actionInsight.recent7 ?? actionInsight.average}
+            actionPending={actionInsight.pendingReviewCount}
             onStart={startQuiz}
             onOpenResult={goHome}
             onOpenLibrary={() => setRoute({ name: 'library' })}
             onOpenHistory={() => setRoute({ name: 'history' })}
+            onOpenAction={goAction}
           />
         );
         break;
@@ -153,18 +180,66 @@ export default function App() {
       );
       break;
 
+    case 'action':
+      content = (
+        <ActionScreen
+          plans={dailyPlans}
+          onBack={goHome}
+          onEditPlan={(date) => setRoute({ name: 'action-plan', date })}
+          onReview={(date) => setRoute({ name: 'action-review', date })}
+        />
+      );
+      break;
+
+    case 'action-plan':
+      content = (
+        <ActionPlanScreen
+          date={route.date}
+          existing={planByDate(route.date)}
+          onSave={handleSavePlan}
+          onBack={goAction}
+        />
+      );
+      break;
+
+    case 'action-review': {
+      const plan = planByDate(route.date);
+      if (!plan || plan.tasks.length === 0) {
+        content = (
+          <ActionScreen
+            plans={dailyPlans}
+            onBack={goHome}
+            onEditPlan={(date) => setRoute({ name: 'action-plan', date })}
+            onReview={(date) => setRoute({ name: 'action-review', date })}
+          />
+        );
+        break;
+      }
+      content = (
+        <ActionReviewScreen
+          plan={plan}
+          onSave={handleSavePlan}
+          onBack={goAction}
+        />
+      );
+      break;
+    }
+
     default:
       content = (
         <HomeScreen
           latest={latest}
           historyCount={assessments.length}
           finishedCount={finishedBooks.length}
+          actionScore={actionInsight.recent7 ?? actionInsight.average}
+          actionPending={actionInsight.pendingReviewCount}
           onStart={startQuiz}
           onOpenResult={() =>
             latest && setRoute({ name: 'result', assessmentId: latest.id })
           }
           onOpenLibrary={() => setRoute({ name: 'library' })}
           onOpenHistory={() => setRoute({ name: 'history' })}
+          onOpenAction={goAction}
         />
       );
   }
