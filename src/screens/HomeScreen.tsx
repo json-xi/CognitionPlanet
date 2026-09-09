@@ -12,20 +12,26 @@ interface Props {
   latest?: Assessment;
   historyCount: number;
   finishedCount: number;
+  actionScore?: number | null;
+  actionPending?: number;
   onStart: () => void;
   onOpenResult: () => void;
   onOpenLibrary: () => void;
   onOpenHistory: () => void;
+  onOpenAction: () => void;
 }
 
 export default function HomeScreen({
   latest,
   historyCount,
   finishedCount,
+  actionScore,
+  actionPending = 0,
   onStart,
   onOpenResult,
   onOpenLibrary,
   onOpenHistory,
+  onOpenAction,
 }: Props) {
   const level = latest ? getLevel(latest.overall) : null;
   const weakest = latest ? sortByWeakest(latest.dimensionScores)[0] : null;
@@ -99,10 +105,27 @@ export default function HomeScreen({
         <View style={styles.statsRow}>
           <StatBox value={String(historyCount)} label="评估次数" />
           <StatBox value={String(finishedCount)} label="已读完" />
-          <StatBox value={String(QUESTION_COUNT)} label="题库题量" />
+          <StatBox
+            value={
+              actionScore === null || actionScore === undefined
+                ? '—'
+                : String(Math.round(actionScore))
+            }
+            label="行动力"
+          />
         </View>
 
         <View style={styles.actions}>
+          <ActionRow
+            emoji="🚀"
+            title="行动力评估"
+            desc={
+              actionPending > 0
+                ? `有 ${actionPending} 天计划待复盘 · 计划→执行→打分`
+                : '每天定计划，次日复盘，追踪你的行动力'
+            }
+            onPress={onOpenAction}
+          />
           {latest && (
             <ActionRow
               emoji="🔄"

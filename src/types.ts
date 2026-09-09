@@ -81,3 +81,65 @@ export interface ReadingStage {
   goal: string;
   books: Book[];
 }
+
+/** 日计划里的单条任务 */
+export interface PlanTask {
+  id: string;
+  title: string;
+  /** 重要度：影响计划质量分，非强制 */
+  priority: 'high' | 'medium' | 'low';
+}
+
+/** 任务实际执行情况：完成 / 部分完成 / 未做 */
+export type TaskStatus = 'done' | 'partial' | 'skipped';
+
+/**
+ * 一天的计划 +（可选）次日回顾。
+ * date 用本地 YYYY-MM-DD，便于按日历日归档。
+ */
+export interface DailyPlan {
+  id: string;
+  date: string;
+  createdAt: number;
+  tasks: PlanTask[];
+  /** 回顾提交时间；有值表示已复盘 */
+  reviewedAt?: number;
+  /** taskId -> 执行状态 */
+  taskResults?: Record<string, TaskStatus>;
+  /** 可选反思 */
+  reflection?: string;
+}
+
+export interface ActionDayScore {
+  date: string;
+  /** 执行率 0–100：done=100, partial=50, skipped=0 */
+  completion: number;
+  /** 计划质量 0–100：任务数量是否合理、是否区分优先级 */
+  planning: number;
+  /** 当日行动力 = 0.7*执行 + 0.3*计划 */
+  overall: number;
+  reviewed: boolean;
+}
+
+export interface ActionInsight {
+  /** 已复盘天数的平均行动力 */
+  average: number | null;
+  /** 近 7 个已复盘日平均 */
+  recent7: number | null;
+  /** 连续复盘天数（从最近往前） */
+  streak: number;
+  /** 已复盘天数 */
+  reviewedCount: number;
+  /** 待复盘（有计划但未回顾，且日期早于今天） */
+  pendingReviewCount: number;
+  level: ActionLevel;
+}
+
+export interface ActionLevel {
+  key: string;
+  name: string;
+  emoji: string;
+  min: number;
+  color: string;
+  description: string;
+}
