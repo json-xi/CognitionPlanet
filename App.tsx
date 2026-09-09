@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, BackHandler, View } from 'react-native';
 import { Screen } from './src/components/ui';
 import { buildInsight } from './src/logic/actionScore';
+import { sampleQuizQuestions } from './src/logic/sample';
 import { buildAssessment } from './src/logic/scoring';
 import { Route } from './src/navigation';
 import ActionPlanScreen from './src/screens/ActionPlanScreen';
@@ -22,7 +23,7 @@ import {
   upsertDailyPlan,
 } from './src/storage/storage';
 import { colors } from './src/theme/theme';
-import { Assessment, DailyPlan } from './src/types';
+import { Assessment, DailyPlan, Question } from './src/types';
 
 export default function App() {
   const [route, setRoute] = useState<Route>({ name: 'home' });
@@ -30,6 +31,8 @@ export default function App() {
   const [finishedBooks, setFinishedBooks] = useState<string[]>([]);
   const [dailyPlans, setDailyPlans] = useState<DailyPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  /** 当前这一场评估抽中的题目，进入 quiz 时生成，交卷后清空 */
+  const [quizPaper, setQuizPaper] = useState<Question[] | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -45,8 +48,18 @@ export default function App() {
     })();
   }, []);
 
-  const goHome = useCallback(() => setRoute({ name: 'home' }), []);
+  const goHome = useCallback(() => {
+    setQuizPaper(null);
+    setRoute({ name: 'home' });
+  }, []);
+
   const goAction = useCallback(() => setRoute({ name: 'action' }), []);
+
+  const startQuiz = useCallback(() => {
+    const paper = sampleQuizQuestions(assessments);
+    setQuizPaper(paper);
+    setRoute({ name: 'quiz' });
+  }, [assessments]);
 
   // Android 物理返回键
   useEffect(() => {
@@ -62,12 +75,17 @@ export default function App() {
     return () => sub.remove();
   }, [route, goHome]);
 
-  const handleFinishQuiz = useCallback(async (answers: Record<string, string>) => {
-    const assessment = buildAssessment(answers);
-    const next = await saveAssessment(assessment);
-    setAssessments(next);
-    setRoute({ name: 'result', assessmentId: assessment.id });
-  }, []);
+  const handleFinishQuiz = useCallback(
+    async (answers: Record<string, string>) => {
+      const questionIds = quizPaper?.map((q) => q.id) ?? Object.keys(answers);
+      const assessment = buildAssessment(answers, questionIds);
+      const next = await saveAssessment(assessment);
+      setAssessments(next);
+      setQuizPaper(null);
+      setRoute({ name: 'result', assessmentId: assessment.id });
+    },
+    [quizPaper]
+  );
 
   const handleToggleFinished = useCallback(async (bookId: string) => {
     const next = await toggleFinishedBook(bookId);
@@ -100,7 +118,14 @@ export default function App() {
 
   switch (route.name) {
     case 'quiz':
-      content = <QuizScreen onFinish={handleFinishQuiz} onExit={goHome} />;
+      content = (
+        <QuizScreen
+          key={quizPaper?.map((q) => q.id).join(',') || 'empty'}
+          questions={quizPaper ?? []}
+          onFinish={handleFinishQuiz}
+          onExit={goHome}
+        />
+      );
       break;
 
     case 'result': {
@@ -113,7 +138,7 @@ export default function App() {
             finishedCount={finishedBooks.length}
             actionScore={actionInsight.recent7 ?? actionInsight.average}
             actionPending={actionInsight.pendingReviewCount}
-            onStart={() => setRoute({ name: 'quiz' })}
+            onStart={startQuiz}
             onOpenResult={goHome}
             onOpenLibrary={() => setRoute({ name: 'library' })}
             onOpenHistory={() => setRoute({ name: 'history' })}
@@ -129,7 +154,7 @@ export default function App() {
           finishedBooks={finishedBooks}
           onToggleFinished={handleToggleFinished}
           onBack={goHome}
-          onRetake={() => setRoute({ name: 'quiz' })}
+          onRetake={startQuiz}
         />
       );
       break;
@@ -208,7 +233,7 @@ export default function App() {
           finishedCount={finishedBooks.length}
           actionScore={actionInsight.recent7 ?? actionInsight.average}
           actionPending={actionInsight.pendingReviewCount}
-          onStart={() => setRoute({ name: 'quiz' })}
+          onStart={startQuiz}
           onOpenResult={() =>
             latest && setRoute({ name: 'result', assessmentId: latest.id })
           }

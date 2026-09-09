@@ -69,6 +69,8 @@ export interface CognitiveLevel {
 export interface Assessment {
   id: string;
   createdAt: number;
+  /** 本次抽中的题目 id；旧记录可能缺失，抽题时会回退到 answers 的 key */
+  questionIds?: string[];
   /** questionId -> optionId */
   answers: Record<string, string>;
   overall: number;

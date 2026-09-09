@@ -3,7 +3,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import PlanetOrb from '../components/PlanetOrb';
 import { Button, Card, ProgressBar, Screen } from '../components/ui';
 import { DIMENSION_MAP, getLevel } from '../data/dimensions';
-import { QUESTION_COUNT } from '../data/questions';
+import { QUESTIONS_PER_DIMENSION } from '../data/questions';
+import { quizQuestionCount } from '../logic/sample';
 import { sortByWeakest } from '../logic/scoring';
 import { colors, font, radius, spacing } from '../theme/theme';
 import { Assessment } from '../types';
@@ -91,8 +92,9 @@ export default function HomeScreen({
           <Card style={styles.summaryCard}>
             <Text style={styles.emptyTitle}>还没有测过</Text>
             <Text style={styles.emptyDesc}>
-              {QUESTION_COUNT} 道题，约 8 分钟。测完会给出六个维度的认知画像，
-              并按你的短板生成一份分阶段书单。
+              每次从题库抽 {quizQuestionCount(QUESTIONS_PER_DIMENSION)}{' '}
+              道题（每维 {QUESTIONS_PER_DIMENSION} 道），约 5
+              分钟。测完会给出六个维度的认知画像，并按你的短板生成一份分阶段书单。重测时会换题，避免记住答案。
             </Text>
             <Button
               label="开始认知评估"

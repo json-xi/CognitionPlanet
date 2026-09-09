@@ -9,27 +9,42 @@ import {
 } from 'react-native';
 import { Button, ProgressBar, Screen } from '../components/ui';
 import { DIMENSION_MAP } from '../data/dimensions';
-import { QUESTIONS } from '../data/questions';
 import { colors, font, radius, spacing } from '../theme/theme';
+import { Question } from '../types';
 
 interface Props {
+  questions: Question[];
   onFinish: (answers: Record<string, string>) => void;
   onExit: () => void;
 }
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
-export default function QuizScreen({ onFinish, onExit }: Props) {
+export default function QuizScreen({ questions, onFinish, onExit }: Props) {
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const fade = useRef(new Animated.Value(1)).current;
   const slide = useRef(new Animated.Value(0)).current;
   const scrollRef = useRef<ScrollView>(null);
+  // 开场时锁定本场卷面，避免父组件重渲染换题
+  const paperRef = useRef(questions);
+  const paper = paperRef.current;
 
-  const question = QUESTIONS[index];
+  if (!paper.length) {
+    return (
+      <Screen>
+        <View style={styles.empty}>
+          <Text style={styles.emptyText}>题库为空，请返回首页重试。</Text>
+          <Button label="返回" onPress={onExit} style={{ marginTop: spacing.lg }} />
+        </View>
+      </Screen>
+    );
+  }
+
+  const question = paper[index];
   const dim = DIMENSION_MAP[question.dimension];
   const selected = answers[question.id];
-  const isLast = index === QUESTIONS.length - 1;
+  const isLast = index === paper.length - 1;
 
   const animateTo = (next: number, direction: 1 | -1) => {
     Animated.parallel([
@@ -67,7 +82,6 @@ export default function QuizScreen({ onFinish, onExit }: Props) {
     setAnswers(next);
 
     if (isLast) return;
-    // 留一点时间让选中态被看见，再翻页
     setTimeout(() => animateTo(index + 1, 1), 220);
   };
 
@@ -80,7 +94,7 @@ export default function QuizScreen({ onFinish, onExit }: Props) {
   };
 
   const answeredCount = Object.keys(answers).length;
-  const progress = (answeredCount / QUESTIONS.length) * 100;
+  const progress = (answeredCount / paper.length) * 100;
 
   return (
     <Screen>
@@ -89,7 +103,7 @@ export default function QuizScreen({ onFinish, onExit }: Props) {
           <Text style={styles.back}>‹ {index === 0 ? '退出' : '上一题'}</Text>
         </Pressable>
         <Text style={styles.counter}>
-          {index + 1} / {QUESTIONS.length}
+          {index + 1} / {paper.length}
         </Text>
       </View>
 
@@ -162,11 +176,11 @@ export default function QuizScreen({ onFinish, onExit }: Props) {
           {isLast && (
             <Button
               label={
-                answeredCount === QUESTIONS.length
+                answeredCount === paper.length
                   ? '生成我的认知报告'
-                  : `还有 ${QUESTIONS.length - answeredCount} 题未作答`
+                  : `还有 ${paper.length - answeredCount} 题未作答`
               }
-              disabled={answeredCount !== QUESTIONS.length}
+              disabled={answeredCount !== paper.length}
               onPress={() => onFinish(answers)}
               style={{ marginTop: spacing.xl }}
             />
@@ -174,6 +188,7 @@ export default function QuizScreen({ onFinish, onExit }: Props) {
 
           <Text style={styles.tip}>
             凭第一反应作答，不必追求「正确答案」——测的是你真实的思考方式。
+            每次评估会从题库中重新抽题。
           </Text>
         </Animated.View>
       </ScrollView>
@@ -247,4 +262,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     lineHeight: 18,
   },
+  empty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  emptyText: { color: colors.textMuted, fontSize: font.body },
 });
