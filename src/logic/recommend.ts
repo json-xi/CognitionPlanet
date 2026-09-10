@@ -55,6 +55,7 @@ function pickBooks(
  * 1. 补地基——最弱的两个维度
  * 2. 扩边界——中间两个维度
  * 3. 筑高峰——最强维度的深度阅读
+ * （五维时：弱 2 + 中 2 + 强 1）
  */
 export function buildReadingPlan(scores: DimensionScore[]): ReadingStage[] {
   const weakest = sortByWeakest(scores);

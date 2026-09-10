@@ -1,5 +1,5 @@
 /**
- * 逻辑自检：题库完整性、分维抽题、算分与书单推荐。
+ * 逻辑自检：五维题库、分维抽题、算分与书单推荐。
  * 运行：npm run verify
  */
 import { BOOKS } from '../src/data/books';
@@ -35,7 +35,13 @@ function seededRandom(seed: number) {
 
 console.log('\n=== 数据完整性 ===');
 
-check('题目总数为 48', QUESTIONS.length === 48, `实际 ${QUESTIONS.length}`);
+check('维度数量为 5', DIMENSIONS.length === 5, `实际 ${DIMENSIONS.length}`);
+check(
+  '维度 id 齐全',
+  DIMENSIONS.map((d) => d.id).join(',') === 'meta,focus,learning,action,emotion'
+);
+
+check('题目总数为 40', QUESTIONS.length === 40, `实际 ${QUESTIONS.length}`);
 
 for (const dim of DIMENSIONS) {
   const n = QUESTIONS.filter((q) => q.dimension === dim.id).length;
@@ -75,12 +81,11 @@ console.log('\n=== 分维度抽题 ===');
 const expectedQuizSize = quizQuestionCount(QUESTIONS_PER_DIMENSION);
 check(
   `每次抽题数为 ${expectedQuizSize}`,
-  expectedQuizSize === DIMENSIONS.length * QUESTIONS_PER_DIMENSION
+  expectedQuizSize === DIMENSIONS.length * QUESTIONS_PER_DIMENSION,
+  `应为 ${DIMENSIONS.length * QUESTIONS_PER_DIMENSION}`
 );
 
-const paper1 = sampleQuizQuestions([], {
-  random: seededRandom(1),
-});
+const paper1 = sampleQuizQuestions([], { random: seededRandom(1) });
 check(
   '首场抽题数量正确',
   paper1.length === expectedQuizSize,
@@ -101,7 +106,6 @@ check(
   new Set(paper1.map((q) => q.id)).size === paper1.length
 );
 
-// 模拟上一场评估，验证重测避开近期题目
 const fakePrev: Assessment = {
   id: 'as_prev',
   createdAt: Date.now() - 1000,
@@ -111,10 +115,10 @@ const fakePrev: Assessment = {
   dimensionScores: DIMENSIONS.map((d) => ({ dimension: d.id, score: 40 })),
 };
 
-const paper2 = sampleQuizQuestions([fakePrev], {
-  random: seededRandom(2),
-});
-const overlap = paper2.filter((q) => (fakePrev.questionIds ?? []).includes(q.id));
+const paper2 = sampleQuizQuestions([fakePrev], { random: seededRandom(2) });
+const overlap = paper2.filter((q) =>
+  (fakePrev.questionIds ?? []).includes(q.id)
+);
 check(
   '重测与上场题目零重叠（题池足够时）',
   overlap.length === 0,
@@ -127,12 +131,11 @@ check(
   recent.size === (fakePrev.questionIds?.length ?? 0)
 );
 
-// 选项顺序被打乱：同一题两次抽样，选项 id 序列不完全相同的概率很高
 const optOrders = new Set<string>();
 for (let i = 0; i < 8; i += 1) {
   const p = sampleQuizQuestions([], { random: seededRandom(100 + i) });
-  const c1 = p.find((q) => q.id === 'c1');
-  if (c1) optOrders.add(c1.options.map((o) => o.id).join(''));
+  const me1 = p.find((q) => q.id === 'me1');
+  if (me1) optOrders.add(me1.options.map((o) => o.id).join(''));
 }
 check(
   '选项顺序会被打乱（多次抽样出现不同排列）',
@@ -151,7 +154,6 @@ function simulate(
   const answers: Record<string, string> = {};
   paper.forEach((q, i) => {
     const idx = Math.min(Math.max(pick(i), 0), q.options.length - 1);
-    // 注意：选项已被打乱，按当前卷面下标取
     answers[q.id] = q.options[idx].id;
   });
 
@@ -169,15 +171,15 @@ function simulate(
       DIMENSION_MAP[weakest.dimension].name
     } ${weakest.score}`
   );
-  console.log(
-    `  卷面 ${paper.map((q) => q.id).join(',')}`
-  );
+  console.log(`  卷面 ${paper.map((q) => q.id).join(',')}`);
   console.log(
     `  维度：${assessment.dimensionScores
       .map((s) => `${DIMENSION_MAP[s.dimension].short} ${s.score}`)
       .join('  ')}`
   );
-  console.log(`  书单 ${books.length} 本：${books.map((b) => b.title).join('、')}`);
+  console.log(
+    `  书单 ${books.length} 本：${books.map((b) => b.title).join('、')}`
+  );
 
   check(
     '  记录了 questionIds',
@@ -214,10 +216,7 @@ function simulate(
 simulate('全部选卷面 A', () => 0, 11);
 simulate('全部选卷面最后一项', () => 99, 22);
 simulate('交替作答', (i) => i % 4, 33);
-simulate('偏科型（批判维选高分项）', (i) => {
-  // 这里无法按维度精准，改为：奇数题选最后、偶数选第一，覆盖中低分
-  return i % 2 === 0 ? 99 : 0;
-}, 44);
+simulate('偏科型', (i) => (i % 2 === 0 ? 99 : 0), 44);
 
 console.log('\n=== 结果 ===');
 if (failures > 0) {

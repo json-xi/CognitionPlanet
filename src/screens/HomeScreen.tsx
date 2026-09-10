@@ -88,7 +88,7 @@ export default function HomeScreen({
             <Text style={styles.emptyDesc}>
               每次从题库抽 {quizQuestionCount(QUESTIONS_PER_DIMENSION)}{' '}
               道题（每维 {QUESTIONS_PER_DIMENSION} 道），约 5
-              分钟。测完会给出六个维度的认知画像，并按你的短板生成一份分阶段书单。重测时会换题，避免记住答案。
+              分钟。测完会给出五个维度的认知画像——元认知、专注力、学习力、行动力、情绪力——并按你的短板生成一份分阶段书单。重测时会换题，避免记住答案。
             </Text>
             <Button
               label="开始认知评估"

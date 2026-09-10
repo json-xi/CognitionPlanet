@@ -1,10 +1,9 @@
 export type DimensionId =
-  | 'critical'
-  | 'probability'
-  | 'bias'
-  | 'systems'
-  | 'decision'
-  | 'meta';
+  | 'meta'
+  | 'focus'
+  | 'learning'
+  | 'action'
+  | 'emotion';
 
 export interface Dimension {
   id: DimensionId;
@@ -25,7 +24,7 @@ export interface Dimension {
 export interface Option {
   id: string;
   text: string;
-  /** 0-100，代表该选项体现的认知水平 */
+  /** 0-100，代表该选项体现的能力水平 */
   score: number;
 }
 
