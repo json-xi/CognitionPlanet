@@ -1,243 +1,186 @@
-import {
-  ActionDayScore,
-  ActionInsight,
-  ActionLevel,
-  DailyPlan,
-  PlanTask,
-  TaskStatus,
-} from '../types';
-import { colors } from '../theme/theme';
+import { ActionDay, ActionDayScores, ActionItem, ActionProgram } from '../types';
 
-export const ACTION_LEVELS: ActionLevel[] = [
-  {
-    key: 'idle',
-    name: '待机',
-    emoji: '🌑',
-    min: 0,
-    color: '#5F6B8F',
-    description: '计划与执行还没形成闭环，先从每天 1–3 件小事做起。',
-  },
-  {
-    key: 'spark',
-    name: '点火',
-    emoji: '🌒',
-    min: 35,
-    color: '#4ECDC4',
-    description: '已经开始动起来了。把计划写具体一点，复盘别隔太久。',
-  },
-  {
-    key: 'orbit',
-    name: '入轨',
-    emoji: '🌓',
-    min: 50,
-    color: '#7C5CFF',
-    description: '计划—执行—复盘开始形成节奏，继续保持连续复盘。',
-  },
-  {
-    key: 'thrust',
-    name: '推进',
-    emoji: '🌔',
-    min: 65,
-    color: '#FFC861',
-    description: '执行率不错。可以试着提高高优先级事项的完成占比。',
-  },
-  {
-    key: 'ignition',
-    name: '燃速',
-    emoji: '🌕',
-    min: 80,
-    color: '#FF7A85',
-    description: '计划克制、执行扎实。行动力已经是你的竞争优势。',
-  },
-];
+function round(n: number) {
+  return Math.round(n * 10) / 10;
+}
 
-export function getActionLevel(score: number): ActionLevel {
-  for (let i = ACTION_LEVELS.length - 1; i >= 0; i -= 1) {
-    if (score >= ACTION_LEVELS[i].min) return ACTION_LEVELS[i];
+function clamp(n: number) {
+  return Math.max(0, Math.min(100, n));
+}
+
+/** 单事项完成贡献：完成 1、部分 0.5、其余 0 */
+function itemCompletion(status: ActionItem['status']): number {
+  if (status === 'done') return 1;
+  if (status === 'partial') return 0.5;
+  return 0;
+}
+
+/**
+ * 计划合理性：刚好 3 件、表述足够具体（字数）得分高。
+ * 这是行动力训练，不是排满日程——超过 3 件会扣分。
+ */
+export function scorePlanQuality(items: ActionItem[]): number {
+  if (!items.length) return 0;
+  const countScore =
+    items.length === 3 ? 100 : items.length < 3 ? items.length * 28 : 55;
+
+  const specificity =
+    items.reduce((sum, item) => {
+      const len = item.text.trim().length;
+      if (len >= 12) return sum + 100;
+      if (len >= 6) return sum + 70;
+      if (len >= 2) return sum + 35;
+      return sum;
+    }, 0) / items.length;
+
+  return round(clamp(countScore * 0.55 + specificity * 0.45));
+}
+
+/** 完成率 */
+export function scoreCompletion(items: ActionItem[]): number {
+  if (!items.length) return 0;
+  const ratio =
+    items.reduce((sum, item) => sum + itemCompletion(item.status), 0) /
+    items.length;
+  return round(clamp(ratio * 100));
+}
+
+/**
+ * 启动及时性：未启动/未做 → 低；启动拖延 → 中；按时启动 → 高。
+ * pending 在复盘前不计入（按已复盘事项算）。
+ */
+export function scoreStartTimeliness(items: ActionItem[]): number {
+  const reviewed = items.filter((i) => i.status !== 'pending');
+  if (!reviewed.length) return 0;
+
+  const total = reviewed.reduce((sum, item) => {
+    if (item.status === 'skipped') return sum + 15;
+    if (item.startedLate) return sum + 55;
+    return sum + 100;
+  }, 0);
+
+  return round(clamp(total / reviewed.length));
+}
+
+/**
+ * 归因质量：对未完成/部分完成写了原因，且原因不是敷衍两个字。
+ * 全部完成时给满分（没有需要归因的项）。
+ */
+export function scoreAttribution(items: ActionItem[]): number {
+  const needReason = items.filter(
+    (i) => i.status === 'partial' || i.status === 'skipped'
+  );
+  if (!needReason.length) {
+    const allDone =
+      items.length > 0 && items.every((i) => i.status === 'done');
+    return allDone ? 100 : 0;
   }
-  return ACTION_LEVELS[0];
+
+  const total = needReason.reduce((sum, item) => {
+    const reason = (item.reason ?? '').trim();
+    if (reason.length >= 8) return sum + 100;
+    if (reason.length >= 3) return sum + 60;
+    if (reason.length > 0) return sum + 30;
+    return sum;
+  }, 0);
+
+  return round(clamp(total / needReason.length));
 }
 
-/** 本地日历日 YYYY-MM-DD */
-export function toDateKey(ts: number = Date.now()): string {
-  const d = new Date(ts);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+export function scoreActionDay(items: ActionItem[]): ActionDayScores {
+  const completion = scoreCompletion(items);
+  const startTimeliness = scoreStartTimeliness(items);
+  const planQuality = scorePlanQuality(items);
+  const attribution = scoreAttribution(items);
+  const overall = round(
+    (completion + startTimeliness + planQuality + attribution) / 4
+  );
+  return { completion, startTimeliness, planQuality, attribution, overall };
 }
 
-export function formatDateLabel(dateKey: string): string {
+/** 本地日期 YYYY-MM-DD */
+export function formatDateKey(date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function addDays(dateKey: string, delta: number): string {
   const [y, m, d] = dateKey.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-  return `${m}月${d}日 周${weekdays[date.getDay()]}`;
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + delta);
+  return formatDateKey(dt);
 }
 
-export function shiftDateKey(dateKey: string, deltaDays: number): string {
-  const [y, m, d] = dateKey.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  date.setDate(date.getDate() + deltaDays);
-  return toDateKey(date.getTime());
+export function isEvening(now = new Date()): boolean {
+  return now.getHours() >= 18;
 }
 
-const STATUS_WEIGHT: Record<TaskStatus, number> = {
-  done: 100,
-  partial: 50,
-  skipped: 0,
-};
+/** 行动力偏低阈值：低于此分引导开通 7 天对照 */
+export const ACTION_LOW_THRESHOLD = 55;
 
-/** 计划质量：任务数量适中 + 有优先级区分 */
-export function scorePlanning(tasks: PlanTask[]): number {
-  if (tasks.length === 0) return 0;
-
-  let quantity = 40;
-  if (tasks.length >= 1 && tasks.length <= 2) quantity = 70;
-  else if (tasks.length >= 3 && tasks.length <= 6) quantity = 100;
-  else if (tasks.length >= 7 && tasks.length <= 8) quantity = 75;
-  else quantity = 55; // 任务过多，容易流于形式
-
-  const titlesOk =
-    tasks.filter((t) => t.title.trim().length >= 2).length / tasks.length;
-  const clarity = Math.round(titlesOk * 100);
-
-  const priorities = new Set(tasks.map((t) => t.priority));
-  const diversity =
-    tasks.length === 1 ? 80 : priorities.size >= 2 ? 100 : 70;
-
-  return Math.round(quantity * 0.5 + clarity * 0.3 + diversity * 0.2);
+export function getActionScore(assessmentScores: { dimension: string; score: number }[]): number {
+  return assessmentScores.find((s) => s.dimension === 'action')?.score ?? 0;
 }
 
-/** 执行率：各任务完成度平均 */
-export function scoreCompletion(
-  tasks: PlanTask[],
-  results?: Record<string, TaskStatus>
+export function isActionLow(score: number): boolean {
+  return score < ACTION_LOW_THRESHOLD;
+}
+
+/** 近 N 天已复盘记录的训练均分；没有则 null */
+export function getTrainingActionScore(
+  program: ActionProgram | null | undefined,
+  lookbackDays = 7
 ): number | null {
-  if (!results || tasks.length === 0) return null;
-  const scores = tasks.map((t) => {
-    const status = results[t.id];
-    return status ? STATUS_WEIGHT[status] : 0;
-  });
-  return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+  if (!program) return null;
+  const reviewed = program.days
+    .filter((d) => d.reviewedAt && d.scores)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, lookbackDays);
+  if (!reviewed.length) return null;
+  const sum = reviewed.reduce((acc, d) => acc + (d.scores?.overall ?? 0), 0);
+  return round(sum / reviewed.length);
 }
 
-export function scoreDay(plan: DailyPlan): ActionDayScore {
-  const planning = scorePlanning(plan.tasks);
-  const completion = scoreCompletion(plan.tasks, plan.taskResults);
-  const reviewed = Boolean(plan.reviewedAt && completion !== null);
-  const overall = reviewed
-    ? Math.round((completion as number) * 0.7 + planning * 0.3)
-    : planning;
-
-  return {
-    date: plan.date,
-    completion: completion ?? 0,
-    planning,
-    overall,
-    reviewed,
-  };
+/**
+ * 把训练分回流到报告：评估行动力 60% + 近 7 天训练 40%。
+ * 无训练数据时原样返回。
+ */
+export function blendActionIntoScores<T extends { dimension: string; score: number }>(
+  scores: T[],
+  trainingScore: number | null
+): T[] {
+  if (trainingScore == null) return scores;
+  return scores.map((s) =>
+    s.dimension === 'action'
+      ? { ...s, score: round(s.score * 0.6 + trainingScore * 0.4) }
+      : s
+  );
 }
 
-export function buildInsight(plans: DailyPlan[]): ActionInsight {
-  const today = toDateKey();
-  const sorted = [...plans].sort((a, b) => a.date.localeCompare(b.date));
-  const reviewedScores = sorted
-    .map(scoreDay)
-    .filter((s) => s.reviewed);
-
-  const average =
-    reviewedScores.length === 0
-      ? null
-      : Math.round(
-          reviewedScores.reduce((sum, s) => sum + s.overall, 0) /
-            reviewedScores.length
-        );
-
-  const recent = reviewedScores.slice(-7);
-  const recent7 =
-    recent.length === 0
-      ? null
-      : Math.round(
-          recent.reduce((sum, s) => sum + s.overall, 0) / recent.length
-        );
-
-  // 连续复盘：从昨天或今天起向前数（今天若未复盘则从昨天起）
-  let streak = 0;
-  let cursor = today;
-  const byDate = new Map(sorted.map((p) => [p.date, p]));
-  const todayPlan = byDate.get(today);
-  if (!todayPlan?.reviewedAt) {
-    cursor = shiftDateKey(today, -1);
-  }
-  while (true) {
-    const plan = byDate.get(cursor);
-    if (!plan?.reviewedAt) break;
-    streak += 1;
-    cursor = shiftDateKey(cursor, -1);
-  }
-
-  const pendingReviewCount = sorted.filter(
-    (p) => p.date < today && !p.reviewedAt && p.tasks.length > 0
-  ).length;
-
-  const levelScore = recent7 ?? average ?? 0;
-
-  return {
-    average,
-    recent7,
-    streak,
-    reviewedCount: reviewedScores.length,
-    pendingReviewCount,
-    level: getActionLevel(levelScore),
-  };
+export function getDay(
+  program: ActionProgram,
+  dateKey: string
+): ActionDay | undefined {
+  return program.days.find((d) => d.date === dateKey);
 }
 
-export function createEmptyPlan(date: string): DailyPlan {
-  return {
-    id: `plan_${date}_${Date.now()}`,
-    date,
-    createdAt: Date.now(),
-    tasks: [],
-  };
+export function programDayIndex(program: ActionProgram, dateKey: string): number {
+  const start = formatDateKey(new Date(program.startedAt));
+  const [ys, ms, ds] = start.split('-').map(Number);
+  const [ye, me, de] = dateKey.split('-').map(Number);
+  const a = new Date(ys, ms - 1, ds).getTime();
+  const b = new Date(ye, me - 1, de).getTime();
+  return Math.floor((b - a) / 86400000) + 1;
 }
 
-export function createTask(title: string, priority: PlanTask['priority'] = 'medium'): PlanTask {
-  return {
-    id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    title: title.trim(),
-    priority,
-  };
+export function isProgramActive(program: ActionProgram | null | undefined): boolean {
+  if (!program) return false;
+  const day = programDayIndex(program, formatDateKey());
+  return day >= 1 && day <= program.durationDays;
 }
 
-export function statusLabel(status: TaskStatus): string {
-  switch (status) {
-    case 'done':
-      return '完成';
-    case 'partial':
-      return '部分';
-    case 'skipped':
-      return '未做';
-  }
-}
-
-export function statusColor(status: TaskStatus): string {
-  switch (status) {
-    case 'done':
-      return colors.accent;
-    case 'partial':
-      return colors.gold;
-    case 'skipped':
-      return colors.danger;
-  }
-}
-
-export function priorityLabel(p: PlanTask['priority']): string {
-  switch (p) {
-    case 'high':
-      return '高';
-    case 'medium':
-      return '中';
-    case 'low':
-      return '低';
-  }
+export function reviewedDaysCount(program: ActionProgram): number {
+  return program.days.filter((d) => d.reviewedAt).length;
 }

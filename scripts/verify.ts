@@ -1,5 +1,5 @@
 /**
- * 逻辑自检：题库完整性、分维抽题、算分与书单推荐。
+ * 逻辑自检：五维题库、分维抽题、算分与书单推荐、行动对照。
  * 运行：npm run verify
  */
 import { BOOKS } from '../src/data/books';
@@ -9,13 +9,17 @@ import {
   QUESTIONS_PER_DIMENSION,
 } from '../src/data/questions';
 import {
-  buildInsight,
-  createEmptyPlan,
-  createTask,
-  scoreDay,
-  scorePlanning,
-  shiftDateKey,
-  toDateKey,
+  applyReview,
+  createActionProgram,
+  upsertPlan,
+} from '../src/logic/actionProgram';
+import {
+  blendActionIntoScores,
+  scoreActionDay,
+  scoreAttribution,
+  scoreCompletion,
+  scorePlanQuality,
+  scoreStartTimeliness,
 } from '../src/logic/actionScore';
 import { buildReadingPlan, flattenPlan } from '../src/logic/recommend';
 import {
@@ -24,7 +28,7 @@ import {
   sampleQuizQuestions,
 } from '../src/logic/sample';
 import { buildAssessment, sortByWeakest } from '../src/logic/scoring';
-import { Assessment, DailyPlan } from '../src/types';
+import { ActionItem, Assessment } from '../src/types';
 
 let failures = 0;
 
@@ -44,7 +48,13 @@ function seededRandom(seed: number) {
 
 console.log('\n=== 数据完整性 ===');
 
-check('题目总数为 48', QUESTIONS.length === 48, `实际 ${QUESTIONS.length}`);
+check('维度数量为 5', DIMENSIONS.length === 5, `实际 ${DIMENSIONS.length}`);
+check(
+  '维度 id 齐全',
+  DIMENSIONS.map((d) => d.id).join(',') === 'meta,focus,learning,action,emotion'
+);
+
+check('题目总数为 40', QUESTIONS.length === 40, `实际 ${QUESTIONS.length}`);
 
 for (const dim of DIMENSIONS) {
   const n = QUESTIONS.filter((q) => q.dimension === dim.id).length;
@@ -84,12 +94,11 @@ console.log('\n=== 分维度抽题 ===');
 const expectedQuizSize = quizQuestionCount(QUESTIONS_PER_DIMENSION);
 check(
   `每次抽题数为 ${expectedQuizSize}`,
-  expectedQuizSize === DIMENSIONS.length * QUESTIONS_PER_DIMENSION
+  expectedQuizSize === DIMENSIONS.length * QUESTIONS_PER_DIMENSION,
+  `应为 ${DIMENSIONS.length * QUESTIONS_PER_DIMENSION}`
 );
 
-const paper1 = sampleQuizQuestions([], {
-  random: seededRandom(1),
-});
+const paper1 = sampleQuizQuestions([], { random: seededRandom(1) });
 check(
   '首场抽题数量正确',
   paper1.length === expectedQuizSize,
@@ -110,7 +119,6 @@ check(
   new Set(paper1.map((q) => q.id)).size === paper1.length
 );
 
-// 模拟上一场评估，验证重测避开近期题目
 const fakePrev: Assessment = {
   id: 'as_prev',
   createdAt: Date.now() - 1000,
@@ -120,10 +128,10 @@ const fakePrev: Assessment = {
   dimensionScores: DIMENSIONS.map((d) => ({ dimension: d.id, score: 40 })),
 };
 
-const paper2 = sampleQuizQuestions([fakePrev], {
-  random: seededRandom(2),
-});
-const overlap = paper2.filter((q) => (fakePrev.questionIds ?? []).includes(q.id));
+const paper2 = sampleQuizQuestions([fakePrev], { random: seededRandom(2) });
+const overlap = paper2.filter((q) =>
+  (fakePrev.questionIds ?? []).includes(q.id)
+);
 check(
   '重测与上场题目零重叠（题池足够时）',
   overlap.length === 0,
@@ -136,12 +144,11 @@ check(
   recent.size === (fakePrev.questionIds?.length ?? 0)
 );
 
-// 选项顺序被打乱：同一题两次抽样，选项 id 序列不完全相同的概率很高
 const optOrders = new Set<string>();
 for (let i = 0; i < 8; i += 1) {
   const p = sampleQuizQuestions([], { random: seededRandom(100 + i) });
-  const c1 = p.find((q) => q.id === 'c1');
-  if (c1) optOrders.add(c1.options.map((o) => o.id).join(''));
+  const me1 = p.find((q) => q.id === 'me1');
+  if (me1) optOrders.add(me1.options.map((o) => o.id).join(''));
 }
 check(
   '选项顺序会被打乱（多次抽样出现不同排列）',
@@ -160,7 +167,6 @@ function simulate(
   const answers: Record<string, string> = {};
   paper.forEach((q, i) => {
     const idx = Math.min(Math.max(pick(i), 0), q.options.length - 1);
-    // 注意：选项已被打乱，按当前卷面下标取
     answers[q.id] = q.options[idx].id;
   });
 
@@ -178,15 +184,15 @@ function simulate(
       DIMENSION_MAP[weakest.dimension].name
     } ${weakest.score}`
   );
-  console.log(
-    `  卷面 ${paper.map((q) => q.id).join(',')}`
-  );
+  console.log(`  卷面 ${paper.map((q) => q.id).join(',')}`);
   console.log(
     `  维度：${assessment.dimensionScores
       .map((s) => `${DIMENSION_MAP[s.dimension].short} ${s.score}`)
       .join('  ')}`
   );
-  console.log(`  书单 ${books.length} 本：${books.map((b) => b.title).join('、')}`);
+  console.log(
+    `  书单 ${books.length} 本：${books.map((b) => b.title).join('、')}`
+  );
 
   check(
     '  记录了 questionIds',
@@ -223,67 +229,91 @@ function simulate(
 simulate('全部选卷面 A', () => 0, 11);
 simulate('全部选卷面最后一项', () => 99, 22);
 simulate('交替作答', (i) => i % 4, 33);
-simulate('偏科型（批判维选高分项）', (i) => {
-  // 这里无法按维度精准，改为：奇数题选最后、偶数选第一，覆盖中低分
-  return i % 2 === 0 ? 99 : 0;
-}, 44);
+simulate('偏科型', (i) => (i % 2 === 0 ? 99 : 0), 44);
 
-console.log('\n=== 行动力评分 ===');
+console.log('\n=== 行动对照打分 ===');
 
-const planThin = createEmptyPlan('2026-01-01');
-planThin.tasks = [createTask('读一章', 'high')];
-check('单任务计划质量在合理区间', scorePlanning(planThin.tasks) >= 50 && scorePlanning(planThin.tasks) <= 85);
-
-const planGood = createEmptyPlan('2026-01-02');
-planGood.tasks = [
-  createTask('完成报告初稿', 'high'),
-  createTask('跑步 30 分钟', 'medium'),
-  createTask('整理笔记', 'low'),
-  createTask('回复两封邮件', 'medium'),
-];
-check('3–6 条任务计划质量接近满分', scorePlanning(planGood.tasks) >= 85);
-
-const reviewed: DailyPlan = {
-  ...planGood,
-  reviewedAt: Date.now(),
-  taskResults: {
-    [planGood.tasks[0].id]: 'done',
-    [planGood.tasks[1].id]: 'done',
-    [planGood.tasks[2].id]: 'partial',
-    [planGood.tasks[3].id]: 'skipped',
+const goodItems: ActionItem[] = [
+  {
+    id: '1',
+    text: '写完周报初稿并发给同事',
+    status: 'done',
+    startedLate: false,
   },
-};
-const dayScore = scoreDay(reviewed);
+  {
+    id: '2',
+    text: '跑步三公里不看手机',
+    status: 'partial',
+    reason: '只跑了一公里就下雨了',
+    startedLate: false,
+  },
+  {
+    id: '3',
+    text: '整理书桌并清空收件箱',
+    status: 'skipped',
+    reason: '晚上会议拖太久没启动',
+    startedLate: true,
+  },
+];
+
+const dayScores = scoreActionDay(goodItems);
+check('完成率在 0–100', dayScores.completion >= 0 && dayScores.completion <= 100);
 check(
-  '复盘后行动力 = 0.7*执行 + 0.3*计划',
-  dayScore.reviewed &&
-    dayScore.overall === Math.round(dayScore.completion * 0.7 + dayScore.planning * 0.3),
-  `overall=${dayScore.overall} completion=${dayScore.completion} planning=${dayScore.planning}`
+  '三件具体事项计划合理性偏高',
+  scorePlanQuality(goodItems) >= 70,
+  `实际 ${scorePlanQuality(goodItems)}`
 );
-check('执行率落在 0–100', dayScore.completion >= 0 && dayScore.completion <= 100);
+check(
+  '有归因时归因分高于敷衍',
+  scoreAttribution(goodItems) >
+    scoreAttribution(
+      goodItems.map((i) => ({ ...i, reason: i.reason ? '嗯' : undefined }))
+    )
+);
+check(
+  '未做且启动晚 → 启动及时分低于全完成',
+  scoreStartTimeliness(goodItems) <
+    scoreStartTimeliness(
+      goodItems.map((i) => ({
+        ...i,
+        status: 'done',
+        startedLate: false,
+        reason: undefined,
+      }))
+    )
+);
+check(
+  '完成率约 50（1 完成 + 1 部分 + 1 未做）',
+  scoreCompletion(goodItems) === 50,
+  `实际 ${scoreCompletion(goodItems)}`
+);
 
-const today = toDateKey();
-const streakPlans: DailyPlan[] = [];
-for (let i = 1; i <= 3; i += 1) {
-  const date = shiftDateKey(today, -i);
-  const p = createEmptyPlan(date);
-  p.tasks = [createTask(`任务 ${i}`, 'medium'), createTask(`另一件 ${i}`, 'high')];
-  p.reviewedAt = Date.now();
-  p.taskResults = {
-    [p.tasks[0].id]: 'done',
-    [p.tasks[1].id]: 'done',
-  };
-  streakPlans.push(p);
-}
-const insight = buildInsight(streakPlans);
-check('连续复盘 streak 为 3', insight.streak === 3, `实际 ${insight.streak}`);
-check('已复盘天数为 3', insight.reviewedCount === 3);
-check('平均分不为空', insight.average !== null && insight.average! > 0);
-
-const pendingPlan = createEmptyPlan(shiftDateKey(today, -5));
-pendingPlan.tasks = [createTask('未复盘事项', 'high')];
-const withPending = buildInsight([...streakPlans, pendingPlan]);
-check('能统计待复盘天数', withPending.pendingReviewCount === 1, `实际 ${withPending.pendingReviewCount}`);
+let program = createActionProgram('as_test', 42, 7);
+program = upsertPlan(program, '2026-09-10', [
+  '写完周报初稿并发给同事',
+  '跑步三公里不看手机',
+  '整理书桌并清空收件箱',
+]);
+program = applyReview(program, '2026-09-10', goodItems, '整体还行');
+check('复盘后写入当日四维分', Boolean(program.days[0]?.scores));
+check(
+  '训练回流：评估 60 + 训练 40',
+  (() => {
+    const training = program.days[0]!.scores!.overall;
+    const blended = blendActionIntoScores(
+      [{ dimension: 'action', score: 50 }],
+      training
+    )[0].score;
+    const expected = Math.round((50 * 0.6 + training * 0.4) * 10) / 10;
+    return blended === expected;
+  })(),
+  `回流分 ${
+    blendActionIntoScores(
+      [{ dimension: 'action', score: 50 }],
+      program.days[0]!.scores!.overall
+    )[0].score
+  }`
+);
 
 console.log('\n=== 结果 ===');
 if (failures > 0) {

@@ -1,18 +1,32 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Assessment, DailyPlan } from '../types';
+import { DIMENSIONS } from '../data/dimensions';
+import { ActionProgram, Assessment, DimensionId } from '../types';
 
 const KEY_ASSESSMENTS = '@conplanet/assessments';
 const KEY_FINISHED_BOOKS = '@conplanet/finished_books';
-const KEY_DAILY_PLANS = '@conplanet/daily_plans';
+const KEY_ACTION_PROGRAM = '@conplanet/action_program';
+
+const VALID_DIMENSIONS = new Set(DIMENSIONS.map((d) => d.id));
+
+/** 过滤掉维度模型变更前的旧评估，避免雷达图/书单读到失效 id */
+function isCompatible(assessment: Assessment): boolean {
+  if (!assessment?.dimensionScores?.length) return false;
+  return assessment.dimensionScores.every((s) =>
+    VALID_DIMENSIONS.has(s.dimension as DimensionId)
+  );
+}
 
 export async function loadAssessments(): Promise<Assessment[]> {
   try {
     const raw = await AsyncStorage.getItem(KEY_ASSESSMENTS);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Assessment[];
-    return Array.isArray(parsed)
-      ? parsed.sort((a, b) => b.createdAt - a.createdAt)
-      : [];
+    if (!Array.isArray(parsed)) return [];
+    const compatible = parsed.filter(isCompatible);
+    if (compatible.length !== parsed.length) {
+      await AsyncStorage.setItem(KEY_ASSESSMENTS, JSON.stringify(compatible));
+    }
+    return compatible.sort((a, b) => b.createdAt - a.createdAt);
   } catch {
     return [];
   }
@@ -47,35 +61,29 @@ export async function toggleFinishedBook(bookId: string): Promise<string[]> {
   return next;
 }
 
-export async function loadDailyPlans(): Promise<DailyPlan[]> {
+export async function loadActionProgram(): Promise<ActionProgram | null> {
   try {
-    const raw = await AsyncStorage.getItem(KEY_DAILY_PLANS);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as DailyPlan[];
-    return Array.isArray(parsed)
-      ? parsed.sort((a, b) => b.date.localeCompare(a.date))
-      : [];
+    const raw = await AsyncStorage.getItem(KEY_ACTION_PROGRAM);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ActionProgram;
+    if (!parsed?.id || !Array.isArray(parsed.days)) return null;
+    return parsed;
   } catch {
-    return [];
+    return null;
   }
 }
 
-/** 按 date 覆盖写入；同一天只保留一份计划 */
-export async function upsertDailyPlan(plan: DailyPlan): Promise<DailyPlan[]> {
-  const list = await loadDailyPlans();
-  const next = [plan, ...list.filter((p) => p.date !== plan.date)].sort((a, b) =>
-    b.date.localeCompare(a.date)
-  );
-  // 保留最近 120 天，避免无限膨胀
-  const trimmed = next.slice(0, 120);
-  await AsyncStorage.setItem(KEY_DAILY_PLANS, JSON.stringify(trimmed));
-  return trimmed;
+export async function saveActionProgram(
+  program: ActionProgram
+): Promise<ActionProgram> {
+  await AsyncStorage.setItem(KEY_ACTION_PROGRAM, JSON.stringify(program));
+  return program;
 }
 
 export async function clearAll(): Promise<void> {
   await AsyncStorage.multiRemove([
     KEY_ASSESSMENTS,
     KEY_FINISHED_BOOKS,
-    KEY_DAILY_PLANS,
+    KEY_ACTION_PROGRAM,
   ]);
 }

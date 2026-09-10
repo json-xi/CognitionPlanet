@@ -3,18 +3,21 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import PlanetOrb from '../components/PlanetOrb';
 import { Button, Card, ProgressBar, Screen } from '../components/ui';
 import { DIMENSION_MAP, getLevel } from '../data/dimensions';
-import { QUESTIONS_PER_DIMENSION } from '../data/questions';
+import { QUESTION_BANK_SIZE, QUESTIONS_PER_DIMENSION } from '../data/questions';
 import { quizQuestionCount } from '../logic/sample';
+import {
+  getTrainingActionScore,
+  isProgramActive,
+} from '../logic/actionScore';
 import { sortByWeakest } from '../logic/scoring';
 import { colors, font, radius, spacing } from '../theme/theme';
-import { Assessment } from '../types';
+import { ActionProgram, Assessment } from '../types';
 
 interface Props {
   latest?: Assessment;
   historyCount: number;
   finishedCount: number;
-  actionScore?: number | null;
-  actionPending?: number;
+  actionProgram?: ActionProgram | null;
   onStart: () => void;
   onOpenResult: () => void;
   onOpenLibrary: () => void;
@@ -26,8 +29,7 @@ export default function HomeScreen({
   latest,
   historyCount,
   finishedCount,
-  actionScore,
-  actionPending = 0,
+  actionProgram,
   onStart,
   onOpenResult,
   onOpenLibrary,
@@ -36,6 +38,9 @@ export default function HomeScreen({
 }: Props) {
   const level = latest ? getLevel(latest.overall) : null;
   const weakest = latest ? sortByWeakest(latest.dimensionScores)[0] : null;
+  const hasActionEntry = Boolean(actionProgram);
+  const actionActive = isProgramActive(actionProgram);
+  const trainingScore = getTrainingActionScore(actionProgram);
 
   return (
     <Screen>
@@ -94,7 +99,7 @@ export default function HomeScreen({
             <Text style={styles.emptyDesc}>
               每次从题库抽 {quizQuestionCount(QUESTIONS_PER_DIMENSION)}{' '}
               道题（每维 {QUESTIONS_PER_DIMENSION} 道），约 5
-              分钟。测完会给出六个维度的认知画像，并按你的短板生成一份分阶段书单。重测时会换题，避免记住答案。
+              分钟。测完会给出五个维度的认知画像——元认知、专注力、学习力、行动力、情绪力——并按你的短板生成一份分阶段书单。重测时会换题，避免记住答案。
             </Text>
             <Button
               label="开始认知评估"
@@ -107,27 +112,26 @@ export default function HomeScreen({
         <View style={styles.statsRow}>
           <StatBox value={String(historyCount)} label="评估次数" />
           <StatBox value={String(finishedCount)} label="已读完" />
-          <StatBox
-            value={
-              actionScore === null || actionScore === undefined
-                ? '—'
-                : String(Math.round(actionScore))
-            }
-            label="行动力"
-          />
+          <StatBox value={String(QUESTION_BANK_SIZE)} label="题库题量" />
         </View>
 
         <View style={styles.actions}>
-          <ActionRow
-            emoji="🚀"
-            title="行动力评估"
-            desc={
-              actionPending > 0
-                ? `有 ${actionPending} 天计划待复盘 · 计划→执行→打分`
-                : '每天定计划，次日复盘，追踪你的行动力'
-            }
-            onPress={onOpenAction}
-          />
+          {hasActionEntry && (
+            <ActionRow
+              emoji="🎯"
+              title="说到做到"
+              desc={
+                actionActive
+                  ? `今日练习 · 行动对照${
+                      trainingScore != null
+                        ? ` · 训练分 ${Math.round(trainingScore)}`
+                        : ''
+                    }`
+                  : '查看行动力训练记录与趋势'
+              }
+              onPress={onOpenAction}
+            />
+          )}
           {latest && (
             <ActionRow
               emoji="🔄"

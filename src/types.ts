@@ -1,10 +1,9 @@
 export type DimensionId =
-  | 'critical'
-  | 'probability'
-  | 'bias'
-  | 'systems'
-  | 'decision'
-  | 'meta';
+  | 'meta'
+  | 'focus'
+  | 'learning'
+  | 'action'
+  | 'emotion';
 
 export interface Dimension {
   id: DimensionId;
@@ -25,7 +24,7 @@ export interface Dimension {
 export interface Option {
   id: string;
   text: string;
-  /** 0-100，代表该选项体现的认知水平 */
+  /** 0-100，代表该选项体现的能力水平 */
   score: number;
 }
 
@@ -84,64 +83,56 @@ export interface ReadingStage {
   books: Book[];
 }
 
-/** 日计划里的单条任务 */
-export interface PlanTask {
+/** 行动对照：单日三件重点事项的完成状态 */
+export type ActionItemStatus = 'done' | 'partial' | 'skipped' | 'pending';
+
+export interface ActionItem {
   id: string;
-  title: string;
-  /** 重要度：影响计划质量分，非强制 */
-  priority: 'high' | 'medium' | 'low';
+  text: string;
+  status: ActionItemStatus;
+  /** 未完成/部分完成时的一句原因 */
+  reason?: string;
+  /** 是否启动拖延（当天较晚才动手） */
+  startedLate?: boolean;
 }
 
-/** 任务实际执行情况：完成 / 部分完成 / 未做 */
-export type TaskStatus = 'done' | 'partial' | 'skipped';
-
-/**
- * 一天的计划 +（可选）次日回顾。
- * date 用本地 YYYY-MM-DD，便于按日历日归档。
- */
-export interface DailyPlan {
-  id: string;
+/** 某一天的行动对照记录（计划 + 可选复盘） */
+export interface ActionDay {
+  /** 计划针对的日期，本地 YYYY-MM-DD */
   date: string;
   createdAt: number;
-  tasks: PlanTask[];
-  /** 回顾提交时间；有值表示已复盘 */
   reviewedAt?: number;
-  /** taskId -> 执行状态 */
-  taskResults?: Record<string, TaskStatus>;
-  /** 可选反思 */
-  reflection?: string;
+  items: ActionItem[];
+  /** 写计划时的一句提醒（可选） */
+  planNote?: string;
+  /** 复盘整日备注（可选） */
+  reviewNote?: string;
+  /** 复盘后算出的当日四维分 */
+  scores?: ActionDayScores;
 }
 
-export interface ActionDayScore {
-  date: string;
-  /** 执行率 0–100：done=100, partial=50, skipped=0 */
+export interface ActionDayScores {
+  /** 完成率 */
   completion: number;
-  /** 计划质量 0–100：任务数量是否合理、是否区分优先级 */
-  planning: number;
-  /** 当日行动力 = 0.7*执行 + 0.3*计划 */
+  /** 启动是否及时（越高越好） */
+  startTimeliness: number;
+  /** 计划是否合理（三件、表述具体） */
+  planQuality: number;
+  /** 归因质量（原因是否写清楚） */
+  attribution: number;
+  /** 四维平均 */
   overall: number;
-  reviewed: boolean;
 }
 
-export interface ActionInsight {
-  /** 已复盘天数的平均行动力 */
-  average: number | null;
-  /** 近 7 个已复盘日平均 */
-  recent7: number | null;
-  /** 连续复盘天数（从最近往前） */
-  streak: number;
-  /** 已复盘天数 */
-  reviewedCount: number;
-  /** 待复盘（有计划但未回顾，且日期早于今天） */
-  pendingReviewCount: number;
-  level: ActionLevel;
-}
-
-export interface ActionLevel {
-  key: string;
-  name: string;
-  emoji: string;
-  min: number;
-  color: string;
-  description: string;
+/** 7 天「说到做到」行动对照训练 */
+export interface ActionProgram {
+  id: string;
+  /** 关联的评估 id */
+  assessmentId: string;
+  /** 开通时的行动力评估分 */
+  baselineActionScore: number;
+  startedAt: number;
+  /** 计划持续天数 */
+  durationDays: number;
+  days: ActionDay[];
 }
