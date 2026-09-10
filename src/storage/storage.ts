@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DIMENSIONS } from '../data/dimensions';
-import { Assessment, DimensionId } from '../types';
+import { ActionProgram, Assessment, DimensionId } from '../types';
 
 const KEY_ASSESSMENTS = '@conplanet/assessments';
 const KEY_FINISHED_BOOKS = '@conplanet/finished_books';
+const KEY_ACTION_PROGRAM = '@conplanet/action_program';
 
 const VALID_DIMENSIONS = new Set(DIMENSIONS.map((d) => d.id));
 
@@ -22,7 +23,6 @@ export async function loadAssessments(): Promise<Assessment[]> {
     const parsed = JSON.parse(raw) as Assessment[];
     if (!Array.isArray(parsed)) return [];
     const compatible = parsed.filter(isCompatible);
-    // 若有旧数据被丢掉，写回干净列表，避免下次再解析
     if (compatible.length !== parsed.length) {
       await AsyncStorage.setItem(KEY_ASSESSMENTS, JSON.stringify(compatible));
     }
@@ -61,6 +61,29 @@ export async function toggleFinishedBook(bookId: string): Promise<string[]> {
   return next;
 }
 
+export async function loadActionProgram(): Promise<ActionProgram | null> {
+  try {
+    const raw = await AsyncStorage.getItem(KEY_ACTION_PROGRAM);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ActionProgram;
+    if (!parsed?.id || !Array.isArray(parsed.days)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveActionProgram(
+  program: ActionProgram
+): Promise<ActionProgram> {
+  await AsyncStorage.setItem(KEY_ACTION_PROGRAM, JSON.stringify(program));
+  return program;
+}
+
 export async function clearAll(): Promise<void> {
-  await AsyncStorage.multiRemove([KEY_ASSESSMENTS, KEY_FINISHED_BOOKS]);
+  await AsyncStorage.multiRemove([
+    KEY_ASSESSMENTS,
+    KEY_FINISHED_BOOKS,
+    KEY_ACTION_PROGRAM,
+  ]);
 }

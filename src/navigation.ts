@@ -3,4 +3,5 @@ export type Route =
   | { name: 'quiz' }
   | { name: 'result'; assessmentId: string }
   | { name: 'library' }
-  | { name: 'history' };
+  | { name: 'history' }
+  | { name: 'action' };

@@ -1,5 +1,5 @@
 /**
- * 逻辑自检：五维题库、分维抽题、算分与书单推荐。
+ * 逻辑自检：五维题库、分维抽题、算分与书单推荐、行动对照。
  * 运行：npm run verify
  */
 import { BOOKS } from '../src/data/books';
@@ -8,6 +8,19 @@ import {
   QUESTIONS,
   QUESTIONS_PER_DIMENSION,
 } from '../src/data/questions';
+import {
+  applyReview,
+  createActionProgram,
+  upsertPlan,
+} from '../src/logic/actionProgram';
+import {
+  blendActionIntoScores,
+  scoreActionDay,
+  scoreAttribution,
+  scoreCompletion,
+  scorePlanQuality,
+  scoreStartTimeliness,
+} from '../src/logic/actionScore';
 import { buildReadingPlan, flattenPlan } from '../src/logic/recommend';
 import {
   collectRecentQuestionIds,
@@ -15,7 +28,7 @@ import {
   sampleQuizQuestions,
 } from '../src/logic/sample';
 import { buildAssessment, sortByWeakest } from '../src/logic/scoring';
-import { Assessment } from '../src/types';
+import { ActionItem, Assessment } from '../src/types';
 
 let failures = 0;
 
@@ -217,6 +230,90 @@ simulate('全部选卷面 A', () => 0, 11);
 simulate('全部选卷面最后一项', () => 99, 22);
 simulate('交替作答', (i) => i % 4, 33);
 simulate('偏科型', (i) => (i % 2 === 0 ? 99 : 0), 44);
+
+console.log('\n=== 行动对照打分 ===');
+
+const goodItems: ActionItem[] = [
+  {
+    id: '1',
+    text: '写完周报初稿并发给同事',
+    status: 'done',
+    startedLate: false,
+  },
+  {
+    id: '2',
+    text: '跑步三公里不看手机',
+    status: 'partial',
+    reason: '只跑了一公里就下雨了',
+    startedLate: false,
+  },
+  {
+    id: '3',
+    text: '整理书桌并清空收件箱',
+    status: 'skipped',
+    reason: '晚上会议拖太久没启动',
+    startedLate: true,
+  },
+];
+
+const dayScores = scoreActionDay(goodItems);
+check('完成率在 0–100', dayScores.completion >= 0 && dayScores.completion <= 100);
+check(
+  '三件具体事项计划合理性偏高',
+  scorePlanQuality(goodItems) >= 70,
+  `实际 ${scorePlanQuality(goodItems)}`
+);
+check(
+  '有归因时归因分高于敷衍',
+  scoreAttribution(goodItems) >
+    scoreAttribution(
+      goodItems.map((i) => ({ ...i, reason: i.reason ? '嗯' : undefined }))
+    )
+);
+check(
+  '未做且启动晚 → 启动及时分低于全完成',
+  scoreStartTimeliness(goodItems) <
+    scoreStartTimeliness(
+      goodItems.map((i) => ({
+        ...i,
+        status: 'done',
+        startedLate: false,
+        reason: undefined,
+      }))
+    )
+);
+check(
+  '完成率约 50（1 完成 + 1 部分 + 1 未做）',
+  scoreCompletion(goodItems) === 50,
+  `实际 ${scoreCompletion(goodItems)}`
+);
+
+let program = createActionProgram('as_test', 42, 7);
+program = upsertPlan(program, '2026-09-10', [
+  '写完周报初稿并发给同事',
+  '跑步三公里不看手机',
+  '整理书桌并清空收件箱',
+]);
+program = applyReview(program, '2026-09-10', goodItems, '整体还行');
+check('复盘后写入当日四维分', Boolean(program.days[0]?.scores));
+check(
+  '训练回流：评估 60 + 训练 40',
+  (() => {
+    const training = program.days[0]!.scores!.overall;
+    const blended = blendActionIntoScores(
+      [{ dimension: 'action', score: 50 }],
+      training
+    )[0].score;
+    const expected = Math.round((50 * 0.6 + training * 0.4) * 10) / 10;
+    return blended === expected;
+  })(),
+  `回流分 ${
+    blendActionIntoScores(
+      [{ dimension: 'action', score: 50 }],
+      program.days[0]!.scores!.overall
+    )[0].score
+  }`
+);
 
 console.log('\n=== 结果 ===');
 if (failures > 0) {

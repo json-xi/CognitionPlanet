@@ -5,31 +5,42 @@ import { Button, Card, ProgressBar, Screen } from '../components/ui';
 import { DIMENSION_MAP, getLevel } from '../data/dimensions';
 import { QUESTION_BANK_SIZE, QUESTIONS_PER_DIMENSION } from '../data/questions';
 import { quizQuestionCount } from '../logic/sample';
+import {
+  getTrainingActionScore,
+  isProgramActive,
+} from '../logic/actionScore';
 import { sortByWeakest } from '../logic/scoring';
 import { colors, font, radius, spacing } from '../theme/theme';
-import { Assessment } from '../types';
+import { ActionProgram, Assessment } from '../types';
 
 interface Props {
   latest?: Assessment;
   historyCount: number;
   finishedCount: number;
+  actionProgram?: ActionProgram | null;
   onStart: () => void;
   onOpenResult: () => void;
   onOpenLibrary: () => void;
   onOpenHistory: () => void;
+  onOpenAction: () => void;
 }
 
 export default function HomeScreen({
   latest,
   historyCount,
   finishedCount,
+  actionProgram,
   onStart,
   onOpenResult,
   onOpenLibrary,
   onOpenHistory,
+  onOpenAction,
 }: Props) {
   const level = latest ? getLevel(latest.overall) : null;
   const weakest = latest ? sortByWeakest(latest.dimensionScores)[0] : null;
+  const hasActionEntry = Boolean(actionProgram);
+  const actionActive = isProgramActive(actionProgram);
+  const trainingScore = getTrainingActionScore(actionProgram);
 
   return (
     <Screen>
@@ -105,6 +116,22 @@ export default function HomeScreen({
         </View>
 
         <View style={styles.actions}>
+          {hasActionEntry && (
+            <ActionRow
+              emoji="🎯"
+              title="说到做到"
+              desc={
+                actionActive
+                  ? `今日练习 · 行动对照${
+                      trainingScore != null
+                        ? ` · 训练分 ${Math.round(trainingScore)}`
+                        : ''
+                    }`
+                  : '查看行动力训练记录与趋势'
+              }
+              onPress={onOpenAction}
+            />
+          )}
           {latest && (
             <ActionRow
               emoji="🔄"

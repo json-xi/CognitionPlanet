@@ -66,6 +66,17 @@ npm run verify      # 题库/书库数据校验 + 模拟答题验证推荐算法
 
 选书时按「主维度匹配 > 难度贴近当前水平 > 覆盖维度多」排序。难度跟着分数走：低于 45 推入门，45–72 推进阶，72 以上推深度。
 
+### 说到做到 · 行动对照
+
+评估报告里会单独展示行动力得分。若行动力偏低（低于 55），强烈推荐开通 **7 天行动对照**——这是行动力训练，不是效率待办或全天日历：
+
+1. **今晚计划**：只写明天 3 件最重要的事
+2. **复盘对照**：完成 / 部分完成 / 未做 + 一句原因（允许当天晚上复盘）
+3. **四维打分**：完成率、启动及时、计划合理性、归因质量
+4. **回流报告**：近 7 天训练均分按约 40% 权重并入总报告的行动力维度（评估 60% + 训练 40%）
+
+开通后，首页出现二级入口「说到做到」。逻辑在 `src/logic/actionScore.ts` / `src/logic/actionProgram.ts`。
+
 ## 目录结构
 
 ```
@@ -81,7 +92,9 @@ src/
 ├── logic/
 │   ├── sample.ts          分维度抽题（避开近期题 + 打乱选项）
 │   ├── scoring.ts         算分引擎
-│   └── recommend.ts       书单推荐算法
+│   ├── recommend.ts       书单推荐算法
+│   ├── actionScore.ts     行动对照四维打分与回流
+│   └── actionProgram.ts   7 天计划创建/复盘
 ├── storage/storage.ts     AsyncStorage 本地持久化
 ├── components/
 │   ├── RadarChart.tsx     雷达图（含上次结果对比）
@@ -89,9 +102,10 @@ src/
 │   ├── BookCard.tsx       书籍卡片
 │   └── ui.tsx             按钮、卡片、进度条等基础组件
 └── screens/
-    ├── HomeScreen.tsx     首页
+    ├── HomeScreen.tsx     首页（开通后含说到做到入口）
     ├── QuizScreen.tsx     答题
-    ├── ResultScreen.tsx   评估报告 + 书单
+    ├── ResultScreen.tsx   评估报告 + 行动力引导 + 书单
+    ├── ActionScreen.tsx   今日计划 / 复盘 / 趋势
     ├── LibraryScreen.tsx  书库浏览
     └── HistoryScreen.tsx  历史记录与趋势
 scripts/verify.ts          数据与算法自检

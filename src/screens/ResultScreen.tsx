@@ -5,6 +5,14 @@ import PlanetOrb from '../components/PlanetOrb';
 import RadarChart from '../components/RadarChart';
 import { Button, Card, ProgressBar, Screen } from '../components/ui';
 import { DIMENSION_MAP, getLevel } from '../data/dimensions';
+import {
+  ACTION_LOW_THRESHOLD,
+  blendActionIntoScores,
+  getActionScore,
+  getTrainingActionScore,
+  isActionLow,
+  isProgramActive,
+} from '../logic/actionScore';
 import { buildReadingPlan, flattenPlan } from '../logic/recommend';
 import {
   diffFromPrevious,
@@ -13,32 +21,49 @@ import {
   sortByWeakest,
 } from '../logic/scoring';
 import { colors, font, radius, spacing } from '../theme/theme';
-import { Assessment } from '../types';
+import { ActionProgram, Assessment } from '../types';
 
 interface Props {
   assessment: Assessment;
   previous?: Assessment;
   finishedBooks: string[];
+  actionProgram?: ActionProgram | null;
   onToggleFinished: (id: string) => void;
   onBack: () => void;
   onRetake: () => void;
+  onStartActionProgram: () => void;
+  onOpenAction: () => void;
 }
 
 export default function ResultScreen({
   assessment,
   previous,
   finishedBooks,
+  actionProgram,
   onToggleFinished,
   onBack,
   onRetake,
+  onStartActionProgram,
+  onOpenAction,
 }: Props) {
+  const trainingScore = getTrainingActionScore(actionProgram);
+  const displayScores = useMemo(
+    () => blendActionIntoScores(assessment.dimensionScores, trainingScore),
+    [assessment.dimensionScores, trainingScore]
+  );
+  const actionScoreRaw = getActionScore(assessment.dimensionScores);
+  const actionScoreBlended = getActionScore(displayScores);
+  const actionLow = isActionLow(actionScoreRaw);
+  const hasProgram = Boolean(actionProgram);
+  const programActive = isProgramActive(actionProgram);
+
   const level = getLevel(assessment.overall);
   const plan = useMemo(
-    () => buildReadingPlan(assessment.dimensionScores),
-    [assessment]
+    () => buildReadingPlan(displayScores),
+    [displayScores]
   );
   const totalBooks = flattenPlan(plan).length;
-  const ranked = sortByWeakest(assessment.dimensionScores);
+  const ranked = sortByWeakest(displayScores);
   const delta = diffFromPrevious(assessment, previous);
 
   let bookIndex = 0;
@@ -85,13 +110,83 @@ export default function ResultScreen({
           <Text style={styles.cardTitle}>认知画像</Text>
           <View style={styles.radarWrap}>
             <RadarChart
-              scores={assessment.dimensionScores}
+              scores={displayScores}
               compare={previous?.dimensionScores}
               size={300}
             />
           </View>
           {previous && (
             <Text style={styles.legend}>虚线为上一次评估结果</Text>
+          )}
+          {trainingScore != null && (
+            <Text style={styles.legend}>
+              行动力已按训练回流（评估 60% + 近 7 天训练 40%）
+            </Text>
+          )}
+        </Card>
+
+        <Card style={styles.actionCard}>
+          <Text style={styles.actionKicker}>行动力</Text>
+          <View style={styles.actionScoreRow}>
+            <Text style={styles.actionScore}>
+              {Math.round(actionScoreBlended)}
+            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionTitle}>说到做到 · 行动对照</Text>
+              <Text style={styles.actionDesc}>
+                {trainingScore != null
+                  ? `评估 ${Math.round(actionScoreRaw)} · 训练 ${Math.round(
+                      trainingScore
+                    )} · 回流后 ${Math.round(actionScoreBlended)}`
+                  : `本次评估 ${Math.round(actionScoreRaw)} 分。这是行动力训练入口，不是效率待办。`}
+              </Text>
+            </View>
+          </View>
+          <ProgressBar
+            value={actionScoreBlended}
+            color={DIMENSION_MAP.action.color}
+            height={5}
+          />
+
+          {!hasProgram && actionLow ? (
+            <>
+              <Text style={styles.actionPrompt}>
+                行动力偏低（低于 {ACTION_LOW_THRESHOLD}
+                ）。强烈推荐开通「7 天说到做到」：每晚只写明天 3
+                件最重要的事，第二天对照完成 / 部分完成 / 未做。
+              </Text>
+              <Button
+                label="开通 7 天行动对照"
+                onPress={onStartActionProgram}
+                style={{ marginTop: spacing.md }}
+              />
+            </>
+          ) : !hasProgram ? (
+            <>
+              <Text style={styles.actionPrompt}>
+                想把想法练成完成的事？用「说到做到」做 7
+                天行动对照——先练启动与兑现，不做复杂日历。
+              </Text>
+              <Button
+                label="开始 7 天行动对照"
+                variant="ghost"
+                onPress={onStartActionProgram}
+                style={{ marginTop: spacing.md }}
+              />
+            </>
+          ) : (
+            <>
+              <Text style={styles.actionPrompt}>
+                {programActive
+                  ? '你的 7 天行动对照进行中。今晚写明天 3 件重点，或复盘今天的兑现情况。'
+                  : '7 天计划已结束。仍可查看训练记录；训练分会继续回流到本报告的行动力维度。'}
+              </Text>
+              <Button
+                label={programActive ? '进入今日练习' : '查看行动对照'}
+                onPress={onOpenAction}
+                style={{ marginTop: spacing.md }}
+              />
+            </>
           )}
         </Card>
 
@@ -100,6 +195,7 @@ export default function ResultScreen({
 
         {ranked.map((item, i) => {
           const dim = DIMENSION_MAP[item.dimension];
+          const isAction = item.dimension === 'action';
           return (
             <View key={item.dimension} style={styles.dimCard}>
               <View style={styles.dimHead}>
@@ -120,6 +216,20 @@ export default function ResultScreen({
               <Text style={styles.dimHint}>
                 {getHint(item.dimension, item.score)}
               </Text>
+              {isAction && actionLow && !hasProgram ? (
+                <Pressable onPress={onStartActionProgram} style={styles.inlineCta}>
+                  <Text style={styles.inlineCtaText}>
+                    提升行动力：开通计划对照 →
+                  </Text>
+                </Pressable>
+              ) : null}
+              {isAction && hasProgram ? (
+                <Pressable onPress={onOpenAction} style={styles.inlineCta}>
+                  <Text style={styles.inlineCtaText}>
+                    提升行动力：继续行动对照 →
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
           );
         })}
@@ -229,6 +339,44 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
 
+  actionCard: { marginTop: spacing.lg },
+  actionKicker: {
+    color: colors.accent,
+    fontSize: font.tiny,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  actionScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  actionScore: {
+    color: DIMENSION_MAP.action.color,
+    fontSize: 36,
+    fontWeight: '800',
+    minWidth: 56,
+  },
+  actionTitle: {
+    color: colors.text,
+    fontSize: font.body + 1,
+    fontWeight: '700',
+  },
+  actionDesc: {
+    color: colors.textMuted,
+    fontSize: font.small,
+    lineHeight: 20,
+    marginTop: 4,
+  },
+  actionPrompt: {
+    color: colors.textMuted,
+    fontSize: font.small + 1,
+    lineHeight: 22,
+    marginTop: spacing.md,
+  },
+
   sectionHead: {
     color: colors.text,
     fontSize: font.h2,
@@ -271,6 +419,12 @@ const styles = StyleSheet.create({
     fontSize: font.small,
     lineHeight: 21,
     marginTop: spacing.md,
+  },
+  inlineCta: { marginTop: spacing.md },
+  inlineCtaText: {
+    color: colors.accent,
+    fontSize: font.small,
+    fontWeight: '700',
   },
 
   stage: { marginBottom: spacing.lg },
